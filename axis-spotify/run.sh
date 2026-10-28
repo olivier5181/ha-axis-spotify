@@ -25,20 +25,27 @@ python3 /ap_check.py
 
 python3 /streamer.py --fifo "$FIFO" --port "$PORT" --bitrate "$MP3_BITRATE" &
 
-librespot \
-    --name "$NAME" \
-    --device-type speaker \
-    --backend pipe \
-    --device "$FIFO" \
-    --format S16 \
-    --bitrate "$SPOTIFY_BITRATE" \
-    --initial-volume "$INITIAL_VOLUME" \
-    --cache /data/cache \
-    --zeroconf-port "$ZEROCONF_PORT" \
-    --disable-audio-cache \
-    "${EXTRA_ARGS[@]}" &
+# Restart librespot after failures (e.g. temporary internet outages)
+(
+    while true; do
+        librespot \
+            --name "$NAME" \
+            --device-type speaker \
+            --backend pipe \
+            --device "$FIFO" \
+            --format S16 \
+            --bitrate "$SPOTIFY_BITRATE" \
+            --initial-volume "$INITIAL_VOLUME" \
+            --cache /data/cache \
+            --zeroconf-port "$ZEROCONF_PORT" \
+            --disable-audio-cache \
+            "${EXTRA_ARGS[@]}" || true
+        echo "[axis-spotify] librespot exited, restarting in 5 seconds"
+        sleep 5
+    done
+) &
 
-# If either process dies, exit so the add-on stops and the failure is visible
+# If the streamer dies, exit so the add-on stops and the failure is visible
 wait -n
 echo "[axis-spotify] A process exited, stopping"
 exit 1

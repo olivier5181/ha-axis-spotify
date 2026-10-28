@@ -1,5 +1,5 @@
 name: Axis Spotify Stream
-version: "1.0.2"
+version: "1.0.3"
 slug: axis_spotify_stream
 description: Spotify Connect receiver that re-streams audio as an MP3 web stream for Axis network speakers
 arch:
