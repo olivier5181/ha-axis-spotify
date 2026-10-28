@@ -55,7 +55,7 @@ EOF
 
     (
         while true; do
-            shairport-sync -c /etc/shairport-sync.conf || true
+            shairport-sync -u -c /etc/shairport-sync.conf || true
             echo "[axis-spotify] shairport-sync exited, restarting in 5 seconds"
             sleep 5
         done
