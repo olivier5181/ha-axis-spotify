@@ -11,6 +11,7 @@ INITIAL_VOLUME="$(opt initial_volume)"
 PORT="$(opt port)"
 ZEROCONF_PORT="$(opt zeroconf_port)"
 AIRPLAY="$(opt airplay)"
+SPOTIFY_CONNECT="$(opt spotify_connect)"
 EXTRA_ARGS=()
 if [ "$(opt debug)" = "True" ]; then EXTRA_ARGS+=(--verbose); fi
 
@@ -63,6 +64,7 @@ EOF
 fi
 
 # Restart librespot after failures (e.g. temporary internet outages)
+if [ "$SPOTIFY_CONNECT" = "True" ]; then
 (
     while true; do
         librespot \
@@ -81,6 +83,9 @@ fi
         sleep 5
     done
 ) &
+else
+    echo "[axis-spotify] Spotify Connect disabled"
+fi
 
 # If the streamer dies, exit so the add-on stops and the failure is visible
 wait "$STREAMER_PID" || true
