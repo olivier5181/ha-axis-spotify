@@ -44,7 +44,7 @@ if [ "$AIRPLAY" = "True" ]; then
 
     cat > /etc/shairport-sync.conf <<EOF
 general = {
-    name = "${NAME}";
+    name = "${NAME} AirPlay";
     output_backend = "pipe";
     mdns_backend = "avahi";
 };
