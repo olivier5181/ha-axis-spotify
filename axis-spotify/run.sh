@@ -20,6 +20,9 @@ mkdir -p /data/cache
 
 echo "[axis-spotify] Stream URL: http://<home-assistant-ip>:${PORT}/spotify.mp3"
 
+# Work around Spotify access points the local network blocks
+python3 /ap_check.py
+
 python3 /streamer.py --fifo "$FIFO" --port "$PORT" --bitrate "$MP3_BITRATE" &
 
 librespot \
