@@ -1,0 +1,121 @@
+"""Turn librespot's raw PCM pipe into a continuous MP3 HTTP stream.
+
+Silence is inserted whenever Spotify is not playing so that connected
+speakers never see the stream drop.
+"""
+
+import argparse
+import os
+import queue
+import subprocess
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+RATE = 44100
+FRAME = 4  # s16le stereo
+BYTES_PER_SEC = RATE * FRAME
+TICK = 0.02
+
+clients = set()
+clients_lock = threading.Lock()
+
+
+def log(msg):
+    print(f"[axis-spotify] {msg}", flush=True)
+
+
+def feed_pcm(fifo_path, ffmpeg_stdin):
+    """Read PCM from the FIFO at real-time pace, padding gaps with silence."""
+    fd = os.open(fifo_path, os.O_RDONLY | os.O_NONBLOCK)
+    pending = b""
+    sent = 0
+    start = time.monotonic()
+    while True:
+        target = int((time.monotonic() - start) * BYTES_PER_SEC) // FRAME * FRAME
+        need = target - sent
+        if need > 0:
+            if len(pending) < need:
+                try:
+                    pending += os.read(fd, need - len(pending))
+                except BlockingIOError:
+                    pass
+            take = min(len(pending), need) // FRAME * FRAME
+            chunk = pending[:take] + b"\x00" * (need - take)
+            pending = pending[take:]
+            ffmpeg_stdin.write(chunk)
+            ffmpeg_stdin.flush()
+            sent = target
+        time.sleep(TICK)
+
+
+def broadcast_mp3(ffmpeg_stdout):
+    while True:
+        data = ffmpeg_stdout.read1(4096)
+        if not data:
+            raise RuntimeError("ffmpeg stopped producing output")
+        with clients_lock:
+            for q in list(clients):
+                try:
+                    q.put_nowait(data)
+                except queue.Full:
+                    clients.discard(q)
+
+
+class StreamHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "audio/mpeg")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("icy-name", "Spotify")
+        self.end_headers()
+        q = queue.Queue(maxsize=256)
+        with clients_lock:
+            clients.add(q)
+        log(f"client connected: {self.client_address[0]}")
+        try:
+            while True:
+                self.wfile.write(q.get(timeout=10))
+        except (BrokenPipeError, ConnectionResetError, queue.Empty, OSError):
+            pass
+        finally:
+            with clients_lock:
+                clients.discard(q)
+            log(f"client disconnected: {self.client_address[0]}")
+
+    def log_message(self, *args):
+        pass
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--fifo", required=True)
+    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--bitrate", type=int, default=192)
+    args = parser.parse_args()
+
+    ffmpeg = subprocess.Popen(
+        [
+            "ffmpeg", "-hide_banner", "-loglevel", "warning",
+            "-f", "s16le", "-ar", str(RATE), "-ac", "2", "-i", "pipe:0",
+            "-c:a", "libmp3lame", "-b:a", f"{args.bitrate}k",
+            "-f", "mp3", "pipe:1",
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+    )
+
+    threading.Thread(target=feed_pcm, args=(args.fifo, ffmpeg.stdin), daemon=True).start()
+    threading.Thread(target=broadcast_mp3, args=(ffmpeg.stdout,), daemon=True).start()
+
+    server = ThreadingHTTPServer(("0.0.0.0", args.port), StreamHandler)
+    server.daemon_threads = True
+    log(f"streaming on port {args.port}")
+    try:
+        server.serve_forever()
+    finally:
+        ffmpeg.kill()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,23 @@
+name: Axis Spotify Stream
+version: "1.0.0"
+slug: axis_spotify_stream
+description: Spotify Connect receiver that re-streams audio as an MP3 web stream for Axis network speakers
+arch:
+  - amd64
+  - aarch64
+startup: application
+boot: auto
+init: false
+host_network: true
+options:
+  name: Axis Speaker
+  spotify_bitrate: 320
+  mp3_bitrate: 192
+  initial_volume: 70
+  port: 8000
+schema:
+  name: str
+  spotify_bitrate: list(96|160|320)
+  mp3_bitrate: list(128|192|256|320)
+  initial_volume: int(0,100)
+  port: port

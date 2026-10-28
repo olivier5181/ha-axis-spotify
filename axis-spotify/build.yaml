@@ -1,0 +1,5 @@
+# Reuse the community Spotify Connect image: it ships librespot 0.8.0 with
+# built-in (libmdns) Spotify Connect discovery.
+build_from:
+  amd64: ghcr.io/hassio-addons/spotify/amd64:0.19.0
+  aarch64: ghcr.io/hassio-addons/spotify/aarch64:0.19.0
