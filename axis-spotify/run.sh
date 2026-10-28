@@ -27,17 +27,20 @@ python3 /ap_check.py
 
 # AirPlay first: it wins when both sources play at once
 python3 /streamer.py --fifo "$AIRPLAY_FIFO" --fifo "$FIFO" --port "$PORT" --bitrate "$MP3_BITRATE" &
+STREAMER_PID=$!
 
 if [ "$AIRPLAY" = "True" ]; then
     # Avahi announces the AirPlay receiver; keep it on the LAN interface only
-    IFACE="$(ip route show default | awk '{print $5; exit}')"
+    IFACE="$(ip route show default 2>/dev/null | awk '{print $5; exit}' || true)"
+    echo "[axis-spotify] AirPlay: starting on interface '${IFACE}'"
     sed -e "s/@IFACE@/${IFACE}/" /etc/avahi/avahi-daemon.conf.template > /etc/avahi/avahi-daemon.conf
     mkdir -p /run/dbus /run/avahi-daemon
     rm -f /run/dbus/dbus.pid /run/dbus/pid /run/avahi-daemon/pid
-    dbus-uuidgen --ensure
-    dbus-daemon --system --fork
-    avahi-daemon --daemonize --no-chroot
-    echo "[axis-spotify] AirPlay receiver '${NAME}' announced on ${IFACE}"
+    dbus-uuidgen --ensure || echo "[axis-spotify] AirPlay: dbus-uuidgen failed"
+    dbus-daemon --system --fork || echo "[axis-spotify] AirPlay: dbus-daemon failed"
+    # Foreground (backgrounded by the shell) so avahi logs to the add-on log
+    avahi-daemon --no-chroot --no-rlimits &
+    sleep 2
 
     cat > /etc/shairport-sync.conf <<EOF
 general = {
@@ -80,6 +83,6 @@ fi
 ) &
 
 # If the streamer dies, exit so the add-on stops and the failure is visible
-wait -n
-echo "[axis-spotify] A process exited, stopping"
+wait "$STREAMER_PID" || true
+echo "[axis-spotify] Streamer exited, stopping"
 exit 1
