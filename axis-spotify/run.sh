@@ -9,6 +9,9 @@ SPOTIFY_BITRATE="$(opt spotify_bitrate)"
 MP3_BITRATE="$(opt mp3_bitrate)"
 INITIAL_VOLUME="$(opt initial_volume)"
 PORT="$(opt port)"
+ZEROCONF_PORT="$(opt zeroconf_port)"
+EXTRA_ARGS=()
+if [ "$(opt debug)" = "True" ]; then EXTRA_ARGS+=(--verbose); fi
 
 FIFO=/tmp/spotify.pcm
 rm -f "$FIFO"
@@ -28,7 +31,9 @@ librespot \
     --bitrate "$SPOTIFY_BITRATE" \
     --initial-volume "$INITIAL_VOLUME" \
     --cache /data/cache \
-    --disable-audio-cache &
+    --zeroconf-port "$ZEROCONF_PORT" \
+    --disable-audio-cache \
+    "${EXTRA_ARGS[@]}" &
 
 # If either process dies, exit so the add-on stops and the failure is visible
 wait -n
