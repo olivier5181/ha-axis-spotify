@@ -77,16 +77,25 @@ class StreamHandler(BaseHTTPRequestHandler):
         q = queue.Queue(maxsize=256)
         with clients_lock:
             clients.add(q)
-        log(f"client connected: {self.client_address[0]}")
+        log(f"client connected: {self.client_address[0]} "
+            f"{self.requestline!r} agent={self.headers.get('User-Agent')!r}")
+        start = time.monotonic()
+        sent = 0
+        reason = "closed"
         try:
             while True:
-                self.wfile.write(q.get(timeout=10))
-        except (BrokenPipeError, ConnectionResetError, queue.Empty, OSError):
-            pass
+                data = q.get(timeout=10)
+                self.wfile.write(data)
+                sent += len(data)
+        except queue.Empty:
+            reason = "no data for 10s (client too slow, dropped)"
+        except OSError as err:
+            reason = f"client closed connection ({err.__class__.__name__})"
         finally:
             with clients_lock:
                 clients.discard(q)
-            log(f"client disconnected: {self.client_address[0]}")
+            log(f"client disconnected: {self.client_address[0]} after "
+                f"{time.monotonic() - start:.1f}s, {sent} bytes, {reason}")
 
     def log_message(self, *args):
         pass
