@@ -1,7 +1,8 @@
-"""Turn librespot's raw PCM pipe into a continuous MP3 HTTP stream.
+"""Turn raw PCM pipes (librespot, AirPlay) into a continuous MP3 HTTP stream.
 
-Silence is inserted whenever Spotify is not playing so that connected
-speakers never see the stream drop.
+Silence is inserted whenever nothing is playing so that connected speakers
+never see the stream drop. When several sources play at once, the first
+one given on the command line wins.
 """
 
 import argparse
@@ -25,25 +26,29 @@ def log(msg):
     print(f"[axis-spotify] {msg}", flush=True)
 
 
-def feed_pcm(fifo_path, ffmpeg_stdin):
-    """Read PCM from the FIFO at real-time pace, padding gaps with silence."""
-    fd = os.open(fifo_path, os.O_RDONLY | os.O_NONBLOCK)
-    pending = b""
+def feed_pcm(fifo_paths, ffmpeg_stdin):
+    """Read PCM from the FIFOs at real-time pace, padding gaps with silence."""
+    sources = [[os.open(path, os.O_RDONLY | os.O_NONBLOCK), b""] for path in fifo_paths]
     sent = 0
     start = time.monotonic()
     while True:
         target = int((time.monotonic() - start) * BYTES_PER_SEC) // FRAME * FRAME
         need = target - sent
         if need > 0:
-            if len(pending) < need:
-                try:
-                    pending += os.read(fd, need - len(pending))
-                except BlockingIOError:
-                    pass
-            take = min(len(pending), need) // FRAME * FRAME
-            chunk = pending[:take] + b"\x00" * (need - take)
-            pending = pending[take:]
-            ffmpeg_stdin.write(chunk)
+            chunk = b""
+            # Drain every source so no writer stalls, keep the first with audio
+            for source in sources:
+                fd, pending = source
+                if len(pending) < need:
+                    try:
+                        pending += os.read(fd, need - len(pending))
+                    except BlockingIOError:
+                        pass
+                take = min(len(pending), need) // FRAME * FRAME
+                if take and not chunk:
+                    chunk = pending[:take]
+                source[1] = pending[take:]
+            ffmpeg_stdin.write(chunk + b"\x00" * (need - len(chunk)))
             ffmpeg_stdin.flush()
             sent = target
         time.sleep(TICK)
@@ -89,7 +94,7 @@ class StreamHandler(BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--fifo", required=True)
+    parser.add_argument("--fifo", action="append", required=True)
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--bitrate", type=int, default=192)
     args = parser.parse_args()

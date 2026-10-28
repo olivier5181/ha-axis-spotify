@@ -1,7 +1,7 @@
 name: Axis Spotify Stream
-version: "1.0.3"
+version: "1.1.0"
 slug: axis_spotify_stream
-description: Spotify Connect receiver that re-streams audio as an MP3 web stream for Axis network speakers
+description: Spotify Connect and AirPlay receiver that re-streams audio as an MP3 web stream for Axis network speakers
 arch:
   - amd64
   - aarch64
@@ -16,6 +16,7 @@ options:
   initial_volume: 70
   port: 8000
   zeroconf_port: 5588
+  airplay: true
   debug: false
 schema:
   name: str
@@ -24,4 +25,5 @@ schema:
   initial_volume: int(0,100)
   port: port
   zeroconf_port: port
+  airplay: bool
   debug: bool
